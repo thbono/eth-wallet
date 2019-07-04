@@ -118,10 +118,9 @@ func getInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	pending := info.(map[string]interface{})["pending"]
-	value, err := strconv.ParseInt(fmt.Sprintf("%v", pending), 16, 32)
 
 	writeJSON(&Info{
-		PendingTransactions: value,
+		PendingTransactions: hexToInt64(pending),
 	}, http.StatusOK, w)
 }
 
@@ -146,6 +145,13 @@ func callEthereumAPI(method string, params []interface{}) (interface{}, error) {
 	}
 
 	return result["result"], nil
+}
+
+func hexToInt64(hex interface{}) (int64) {
+	strHex := fmt.Sprintf("%v", hex)
+	strHex = strHex[2:len(strHex)]
+	value, _ := strconv.ParseInt(strHex, 16, 32)
+	return value
 }
 
 func badRequest(reason string, w http.ResponseWriter) {

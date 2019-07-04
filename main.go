@@ -5,18 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
 
+	"github.com/go-pg/pg"
 	"github.com/gorilla/mux"
 	"github.com/onrik/ethrpc"
 )
 
 // Wallet struct
 type Wallet struct {
-	ID      string `json:"id"`
-	Balance int    `json:"balance"`
+	ID   string
+	Hash string
+}
+
+// Balance struct
+type Balance struct {
+	Balance big.Int `json:"balance"`
 }
 
 // Transaction struct
@@ -61,7 +68,42 @@ func createWallet(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id := params["id"]
 
-	//TODO: create wallet
+	pwd := getEnvOrDefault("WALLETS_PASSWORD", "Sicoob2009")
+	result, err := callEthereumAPI("personal_newAccount", []interface{}{pwd})
+	if err != nil {
+		internalServerError(fmt.Sprintf("Error consuming Ethereum API: %v", err), w)
+		return
+	}
+
+	db := connectDB()
+	defer db.Close()
+
+	stmt, err := db.Prepare(`select count(*) from wallets where id = $1`)
+	if err != nil {
+		internalServerError(fmt.Sprintf("Error prepating wallet database statement: %v", err), w)
+		return
+	}
+
+	var count int
+	_, err = stmt.QueryOne(pg.Scan(&count), id)
+	if err != nil {
+		internalServerError(fmt.Sprintf("Error finding wallet in database: %v", err), w)
+		return
+	}
+
+	if count > 0 {
+		badRequest("Duplicated wallet", w)
+		return
+	}
+
+	err = db.Insert(&Wallet{
+		ID:   id,
+		Hash: fmt.Sprintf("%v", result),
+	})
+	if err != nil {
+		internalServerError(fmt.Sprintf("Error inserting wallet in database: %v", err), w)
+		return
+	}
 
 	log.Printf("Wallet created: %s", id)
 	w.WriteHeader(http.StatusCreated)
@@ -71,11 +113,22 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	id := params["id"]
 
-	//TODO: get balance
+	db := connectDB()
+	defer db.Close()
 
-	writeJSON(&Wallet{
-		ID:      id,
-		Balance: 0,
+	var wallet = &Wallet{ID: id}
+	err := db.Select(wallet)
+	if err != nil {
+		badRequest(fmt.Sprintf("Cannot find wallet in database: %v", err), w)
+	}
+
+	addr := getEnvOrDefault("RPC_ADDR", "http://10.209.9.158:8545")
+	client := ethrpc.New(addr)
+
+	balance, err := client.EthGetBalance(wallet.Hash, "latest")
+
+	writeJSON(&Balance{
+		Balance: balance,
 	}, http.StatusOK, w)
 }
 
@@ -116,8 +169,7 @@ func getStatement(w http.ResponseWriter, r *http.Request) {
 func getInfo(w http.ResponseWriter, r *http.Request) {
 	info, err := callEthereumAPI("txpool_status", []interface{}{})
 	if err != nil {
-		log.Printf("Error consuming Ethereum API: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+		internalServerError(fmt.Sprintf("Error consuming Ethereum API: %v", err), w)
 		return
 	}
 
@@ -126,6 +178,15 @@ func getInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(&Info{
 		PendingTransactions: hexToInt64(pending),
 	}, http.StatusOK, w)
+}
+
+func connectDB() *pg.DB {
+	return pg.Connect(&pg.Options{
+		Addr:     getEnvOrDefault("DB_ADDR", "10.209.9.158:5432"),
+		User:     getEnvOrDefault("DB_USER", "eth"),
+		Password: getEnvOrDefault("DB_PASSWORD", "eth"),
+		Database: getEnvOrDefault("DB_DATABASE", "eth"),
+	})
 }
 
 func callEthereumAPI(method string, params []interface{}) (interface{}, error) {
@@ -160,6 +221,11 @@ func hexToInt64(hex interface{}) int {
 func badRequest(reason string, w http.ResponseWriter) {
 	w.WriteHeader(http.StatusBadRequest)
 	w.Write([]byte(reason))
+}
+
+func internalServerError(reason string, w http.ResponseWriter) {
+	log.Println(reason)
+	w.WriteHeader(http.StatusInternalServerError)
 }
 
 func writeJSON(v interface{}, statusCode int, w http.ResponseWriter) []byte {

@@ -92,6 +92,7 @@ func createTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	t.Date = time.Now()
 	//TODO: create transaction
 
 	json := writeJSON(t, http.StatusCreated, w)
@@ -107,6 +108,9 @@ func getStatement(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//TODO: get transactions
+
+	t := []Transaction{}
+	writeJSON(t, http.StatusOK, w)
 }
 
 func getInfo(w http.ResponseWriter, r *http.Request) {
@@ -149,9 +153,7 @@ func callEthereumAPI(method string, params []interface{}) (interface{}, error) {
 
 func hexToInt64(hex interface{}) int {
 	strHex := fmt.Sprintf("%v", hex)
-	//strHex = strHex[2:len(strHex)]
 	value, _ := ethrpc.ParseInt(strHex)
-	//value, _ := strconv.ParseInt(strHex, 16, 32)
 	return value
 }
 

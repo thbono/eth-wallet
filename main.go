@@ -7,10 +7,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/onrik/ethrpc"
 )
 
 // Wallet struct
@@ -30,7 +30,7 @@ type Transaction struct {
 
 // Info struct
 type Info struct {
-	PendingTransactions int64 `json:"pendingTransactions"`
+	PendingTransactions int `json:"pendingTransactions"`
 }
 
 func main() {
@@ -147,10 +147,11 @@ func callEthereumAPI(method string, params []interface{}) (interface{}, error) {
 	return result["result"], nil
 }
 
-func hexToInt64(hex interface{}) (int64) {
+func hexToInt64(hex interface{}) int {
 	strHex := fmt.Sprintf("%v", hex)
-	strHex = strHex[2:len(strHex)]
-	value, _ := strconv.ParseInt(strHex, 16, 32)
+	//strHex = strHex[2:len(strHex)]
+	value, _ := ethrpc.ParseInt(strHex)
+	//value, _ := strconv.ParseInt(strHex, 16, 32)
 	return value
 }
 

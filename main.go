@@ -126,9 +126,13 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
 	client := ethrpc.New(addr)
 
 	balance, err := client.EthGetBalance(wallet.Hash, "latest")
+	if err != nil {
+		internalServerError(fmt.Sprintf("Error consuming Ethereum API: %v", err), w)
+		return
+	}
 
 	writeJSON(&Balance{
-		Balance: balance,
+		Balance: *balance.Div(&balance, big.NewInt(1000)),
 	}, http.StatusOK, w)
 }
 

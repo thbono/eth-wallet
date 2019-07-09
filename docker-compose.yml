@@ -1,0 +1,81 @@
+version: '3'
+
+services:
+
+  portainer:
+    image: "portainer/portainer"
+    ports:
+      - "9000:9000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+
+  netdata:
+    image: "netdata/netdata"
+    ports:
+      - "19999:19999"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - apparmor:unconfined
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  geth:
+    image: "ethereum/client-go:release-1.8"
+    command: "--rpc --rpcaddr 0.0.0.0 --rpcport 8545 --rpcapi admin,db,eth,debug,miner,net,shh,txpool,personal,web3 --networkid 2009 --nodiscover --maxpeers 0 --mine --minerthreads 2 --gasprice 0"
+    ports:
+      - "8545:8545"
+    volumes:
+      - /home/ec2-user/docker/ethereum/ethereum:/root/.ethereum
+      - /home/ec2-user/docker/ethereum/ethash:/root/.ethash
+
+  eth-netstatus:
+    image: "thbono/eth-netstatus"
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      WS_SECRET: mysecret
+
+  eth-netapi:
+    image: "thbono/eth-netapi"
+    restart: always
+    environment:
+      RPC_HOST: geth
+      RPC_PORT: 8545
+      INSTANCE_NAME: Node1
+      WS_SERVER: http://eth-netstatus:3000
+      WS_SECRET: mysecret
+
+  db:
+    image: "postgres:11-alpine"
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: eth
+      POSTGRES_PASSWORD: eth
+      POSTGRES_DB: eth
+
+  pgadmin:
+    image: "dpage/pgadmin4"
+    ports:
+     - "8080:8080"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_LISTEN_PORT: 8080
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+
+volumes:
+  portainer-data:
+    driver: local
+  db-data:
+    driver: local
+  pgadmin-data:
+    driver: local
